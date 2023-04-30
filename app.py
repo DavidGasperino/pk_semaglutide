@@ -160,6 +160,12 @@ st.sidebar.markdown(
     "[Semaglutide Pharmacokinetic Modeling](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6437231/?report=classic)"
 )
 
+# Add a hyperlink to the GitHub page for the project.
+st.sidebar.markdown(
+    "Code can be found here: "
+    "[pk_semaglutide](https://github.com/DavidGasperino/pk_semaglutide)"
+)
+
 st.markdown("## Disclaimer")
 st.markdown(
     "This application is for educational and informational purposes only. "
