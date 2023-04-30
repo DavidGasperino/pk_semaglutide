@@ -1,17 +1,8 @@
 import streamlit as st
 from two_compartment_model import TwoCompartmentModel
 
-# Custom CSS to make Streamlit columns fill out the width of the browser
-st.markdown(
-    """
-<style>
-    .reportview-container .main .block-container {
-        max-width: 100%;
-    }
-</style>
-""",
-    unsafe_allow_html=True,
-)
+# Add a title across the top of the app
+st.title("Semaglutide Pharmacokinetic Model")
 
 # Input fields for patient parameters in the left sidebar
 st.sidebar.header("Patient Parameters")
@@ -162,6 +153,12 @@ if dosing_schedules:
     right_col.pyplot(fig)
 else:
     middle_col.warning("Please add at least one dosing schedule before simulating.")
+
+# Add a hyperlink to the original document at the bottom of the sidebar
+st.sidebar.markdown(
+    "Link to the article this model is based on: "
+    "[Semaglutide Pharmacokinetic Modeling](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6437231/?report=classic)"
+)
 
 st.markdown("## Disclaimer")
 st.markdown(
