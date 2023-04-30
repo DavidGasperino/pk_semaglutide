@@ -4,9 +4,10 @@ from scipy.integrate import odeint
 
 
 class TwoCompartmentModel:
-    def __init__(self, patient_params, injections):
+    def __init__(self, patient_params, injections, ka_values):
         self.patient_params = patient_params
         self.injections = self.convert_to_hours(injections)
+        self.ka_values = ka_values  # Store the list of ka values
 
     @staticmethod
     def get_patient_params(
@@ -18,8 +19,6 @@ class TwoCompartmentModel:
         age_group,
         hepatic_impairment,
         injection_site,
-        drug_product_strength,
-        T2D,
         weight_ref=85,
     ):
         # Covariate effects
@@ -61,9 +60,6 @@ class TwoCompartmentModel:
         E_hepatic_impairment = theta_hepatic_impairment if hepatic_impairment else 1
         E_injection_site_F = theta_thigh_F if injection_site == "thigh" else 1
 
-        # Calculate ka value based on the provided dosage
-        ka = TwoCompartmentModel.interpolate_ka(drug_product_strength)
-
         # Final parameter values for the individual
         CL = (
             CL_ref
@@ -80,7 +76,7 @@ class TwoCompartmentModel:
         Vp = Vp_ref * E_weight_V  # Vp is scaled with the same factor as Vc
         F = F_ref * E_injection_site_F
 
-        return {"CL": CL, "Q": Q, "Vc": Vc, "Vp": Vp, "ka": ka, "F": F}
+        return {"CL": CL, "Q": Q, "Vc": Vc, "Vp": Vp, "F": F}
 
     @staticmethod
     def interpolate_ka(dosage):
@@ -101,12 +97,19 @@ class TwoCompartmentModel:
 
         # Otherwise, interpolate ka value based on the closest dosages
         sorted_dosages = sorted(dosages_ka.keys())
-        lower_dosage = max(filter(lambda d: d < dosage, sorted_dosages))
-        upper_dosage = min(filter(lambda d: d > dosage, sorted_dosages))
+        lower_dosages = list(filter(lambda d: d < dosage, sorted_dosages))
+        lower_dosage = max(lower_dosages) if lower_dosages else min(sorted_dosages)
+        upper_dosages = list(filter(lambda d: d > dosage, sorted_dosages))
+        upper_dosage = min(upper_dosages) if upper_dosages else max(sorted_dosages)
 
         lower_ka = dosages_ka[lower_dosage]
         upper_ka = dosages_ka[upper_dosage]
 
+        # Check if upper_dosage and lower_dosage are the same
+        if upper_dosage == lower_dosage:
+            return lower_ka
+
+        # Perform interpolation
         ka = lower_ka + (upper_ka - lower_ka) * (dosage - lower_dosage) / (
             upper_dosage - lower_dosage
         )
@@ -166,6 +169,9 @@ class TwoCompartmentModel:
         sorted_injections = sorted(self.injections.items(), key=lambda x: x[0])
         next_dose_index = 0  # Index of the next scheduled dose
 
+        # Set default ka value to the value for the first dosing schedule
+        ka = self.ka_values[0] if self.ka_values else 0.0253  # Default ka value
+
         for i, t in enumerate(t_eval):
             # Check if there is a dose administration at the current time point
             if (
@@ -176,6 +182,9 @@ class TwoCompartmentModel:
                 y_init[2] += (
                     dose_mg / self.patient_params["F"]
                 )  # Add dose to gut compartment
+                ka = self.ka_values[
+                    next_dose_index
+                ]  # Update ka value for the current dosing schedule
                 next_dose_index += 1  # Update the index of the next scheduled dose
 
             # Solve the ODEs for the PK model
@@ -188,7 +197,7 @@ class TwoCompartmentModel:
                     self.patient_params["Q"],
                     self.patient_params["Vc"],
                     self.patient_params["Vp"],
-                    self.patient_params["ka"],
+                    ka,
                     self.patient_params["F"],
                 ),
             )
@@ -201,6 +210,9 @@ class TwoCompartmentModel:
         return time_data, concentration_data
 
     def plot_time_series(self, time, drug_concentration):
+        # Create a figure and axis using plt.subplots()
+        fig, ax = plt.subplots(figsize=(10, 6))
+
         # Molecular weight of semaglutide (g/mol)
         molecular_weight_semaglutide = 4113.57
 
@@ -212,8 +224,8 @@ class TwoCompartmentModel:
         # Convert time from hours to weeks
         time_weeks = np.array(time) / (24 * 7)
 
-        plt.figure(figsize=(10, 6))
-        plt.plot(time_weeks, drug_concentration_nm, label="Semaglutide Concentration")
+        # Plot the data on the axis
+        ax.plot(time_weeks, drug_concentration_nm, label="Semaglutide Concentration")
 
         # Plot the injection points on the plot line
         for t_hours, dose_mg in self.injections.items():
@@ -227,16 +239,41 @@ class TwoCompartmentModel:
             concentration_at_t = drug_concentration_nm[idx]
 
             # Plot a marker at the injection point on the plot line
-            plt.plot(t_weeks, concentration_at_t, "ko", markersize=5)
+            ax.plot(t_weeks, concentration_at_t, "ko", markersize=5)
 
             # Label the marker with the dose in mg
-            plt.text(
+            ax.text(
                 t_weeks, concentration_at_t, f"{dose_mg} mg", ha="left", va="bottom"
             )
 
-        plt.xlabel("Time (weeks)")
-        plt.ylabel("Semaglutide Concentration (nmol/L)")
-        plt.title("Two-Compartment Model: Semaglutide Concentration vs. Time")
-        plt.legend()
-        plt.grid(True)
-        plt.show()
+        # Set up x-axis ticks
+        max_weeks = np.ceil(max(time_weeks))  # Get the maximum number of weeks
+        major_ticks = np.arange(0, max_weeks + 1, 1)  # Major ticks at each week
+        minor_ticks = np.arange(
+            0, max_weeks + 1, 1 / 7
+        )  # Minor ticks with 6 divisions between each week
+
+        ax.set_xticks(major_ticks)
+        ax.set_xticks(minor_ticks, minor=True)
+
+        # Customize vertical grid lines
+        ax.grid(
+            which="major", axis="x", linestyle="-", color="grey"
+        )  # Darker lines for major ticks (weeks)
+        ax.grid(
+            which="minor", axis="x", linestyle="-", color="lightgrey"
+        )  # Lighter lines for minor ticks
+
+        # Only show labels for the weeks (integer values)
+        ax.set_xticklabels(
+            [int(tick) if tick.is_integer() else "" for tick in ax.get_xticks()]
+        )
+
+        ax.set_xlabel("Time (weeks)")
+        ax.set_ylabel("Semaglutide Concentration (nmol/L)")
+        ax.set_title("Two-Compartment Model: Semaglutide Concentration vs. Time")
+        ax.legend()
+        ax.grid(True)
+
+        # Return the figure object
+        return fig
