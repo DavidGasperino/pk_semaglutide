@@ -1,0 +1,40 @@
+# .gitignore
+
+# Python cache and compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment directories
+venv/
+env/
+*.venv/
+
+# Jupyter Notebook files
+.ipynb_checkpoints/
+
+# IDE-specific files (VS Code)
+.vscode/
+
+# Log files
+*.log
+
+# Temporary files
+*.tmp
+*.swp
+*.swo
+
+# Build and distribution directories
+build/
+dist/
+*.egg-info/
+
+# Unit test and coverage output
+.coverage
+htmlcov/
+.tox/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
